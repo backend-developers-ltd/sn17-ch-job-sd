@@ -1,0 +1,3 @@
+[submodule "sn17-image-generator"]
+	path = sn17-image-generator
+	url = git@github.com:backend-developers-ltd/sn17-image-generator.git
