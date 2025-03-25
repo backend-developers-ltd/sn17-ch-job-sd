@@ -1,0 +1,31 @@
+# relative path to the repository on the hugging face portal
+model_id: "sd-legacy/stable-diffusion-v1-5"
+
+# [optional] hf token
+hugging_face_api_key:
+
+# pipeline name (e.g. StableDiffusionXLPipeline)
+pipeline_name: "StableDiffusionPipeline"
+
+# scheduler (e.g. EulerAncestralDiscreteScheduler)
+scheduler_name: "EulerAncestralDiscreteScheduler"
+
+# model params
+num_inference_steps: 20
+guidance_scale: 7
+
+# resolution for the generating images
+image_width: 512
+image_height: 512
+
+# supported torch types: fp16, bfp16, fp32
+torch_dtype: "bf16"
+
+# set it to -1 if you want to use default value for the model.
+max_sequence_length: -1
+
+# enable (True) / disable (False) usage of the negative prompt
+use_negative_prompt: False
+
+# enable (True) / disable (False) usage of the safe tensors data format for model loading
+use_safe_tensors: True
