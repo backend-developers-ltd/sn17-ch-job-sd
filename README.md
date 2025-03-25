@@ -2,18 +2,19 @@
 
 ComputeHorde + SN17 PoC job for running Stable Diffusion generation
 
-# Usage
-
-Use the `build-image.sh` script to turn a model-config yaml file into a tagged docker image.
-
-You can then use the image locally or upload it to an online registry for use as a ComputeHorde job.
-
 # TODO
 
+## repo
+- [ ] Readme on how to use stuff
+
+## docker image
 - [ ] Preload the model into the image in a way that doesn't also load it into the memory at image
   build time
 - [ ] Support for other models via different model-config
 - [ ] Shrink the image if possible - without a model, it's >18GB just for the environment
+
+## sdk client
+- [ ] TBD
 
 # Stable Diffusion License notice
 
