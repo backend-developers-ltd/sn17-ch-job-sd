@@ -26,7 +26,7 @@ ADDITIONAL_CONTEXT="$(mktemp -d)"
 cp "$MODEL_CONFIG_FILE" "$ADDITIONAL_CONTEXT/model_config.yml"
 
 docker build \
-  --build-context codebase="$PWD/sn17-image-generator" \
+  --build-context codebase="$PWD/../sn17-image-generator" \
   --build-context additional_context="$ADDITIONAL_CONTEXT" \
   --file docker/Dockerfile \
   --tag sn17-$IMAGE_SUFFIX \
