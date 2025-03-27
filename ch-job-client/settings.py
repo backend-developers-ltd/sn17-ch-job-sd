@@ -12,3 +12,11 @@ BT_WALLET: bittensor.Wallet = bittensor.wallet(
     name=_conf("BT_WALLET_NAME"),
     hotkey=_conf("BT_HOTKEY_NAME"),
 )
+
+# For storing job output
+AWS_S3_BUCKET_NAME: str = _conf("AWS_S3_BUCKET_NAME")
+# Optional - if not filled in, boto3 will try to configure itself from the environment.
+AWS_REGION_NAME: str | None = _conf("AWS_REGION_NAME", default=None)
+AWS_ACCESS_KEY_ID: str | None = _conf("AWS_ACCESS_KEY_ID", default=None)
+AWS_SECRET_ACCESS_KEY: str | None = _conf("AWS_SECRET_ACCESS_KEY", default=None)
+AWS_S3_ENDPOINT: str | None = _conf("AWS_S3_ENDPOINT", default=None)
