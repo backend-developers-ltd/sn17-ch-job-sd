@@ -3,3 +3,5 @@ compute-horde-sdk @ git+https://github.com/backend-developers-ltd/ComputeHorde.g
 click==8.1.8
 python-decouple==3.8
 boto3==1.37.21
+aiohttp==3.11.14
+

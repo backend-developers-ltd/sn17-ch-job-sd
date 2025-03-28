@@ -1,117 +1,131 @@
 import asyncio
-import base64
-import shutil
-import tempfile
+import glob
+import hashlib
+import random
 import uuid
-from functools import cache
 from pathlib import Path
-
-import boto3
+from typing import TypeAlias
 
 import compute_horde_sdk.v1 as ch
+from typing_extensions import TypeVar
 
-import settings
-
-# TODO: Explain this
-docker_image = "kkowalskireef/sn17-job-sd15:latest"
-job_namespace = "kkowalskireef/sn17-job-sd15:latest"
-
-@cache
-def get_s3_client():
-    s3_client_opts: dict[str, str] = {}
-    if settings.AWS_S3_ENDPOINT:
-        s3_client_opts["endpoint_url"] = settings.AWS_S3_ENDPOINT
-    if settings.AWS_ACCESS_KEY_ID:
-        s3_client_opts["aws_access_key_id"] = settings.AWS_ACCESS_KEY_ID
-    if settings.AWS_SECRET_ACCESS_KEY:
-        s3_client_opts["aws_secret_access_key"] = settings.AWS_SECRET_ACCESS_KEY
-    if settings.AWS_REGION_NAME:
-        s3_client_opts["region_name"] = settings.AWS_REGION_NAME
-    s3 = boto3.client("s3", **s3_client_opts)
-    return s3
+from util import ImageGenerationBatchData, download_and_unpack_zip, get_nth_file_line, ValidationJobData, get_ch_client
 
 
-def generate_upload_url(key: str):
-    s3 = get_s3_client()
-    return s3.generate_presigned_url(
-        "put_object",
-        Params={
-            "Bucket": settings.AWS_S3_BUCKET_NAME,
-            "Key": f"images/{key}",
-        },
-        ExpiresIn=1200,
-    )
-
-def generate_download_url(key: str):
-    s3 = get_s3_client()
-    return s3.generate_presigned_url(
-        "get_object",
-        Params={
-            "Bucket": settings.AWS_S3_BUCKET_NAME,
-            "Key": f"images/{key}",
-        },
-        ExpiresIn=7200,
-    )
-
-def directory_to_volume(directory: Path) -> ch.InlineInputVolume:
-    directory = directory.absolute()
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        zip_path = Path(tmpdir) / "archive.zip"
-        shutil.make_archive(str(zip_path.with_suffix('')), 'zip', directory)
-        with open(zip_path, "rb") as zip_file:
-            encoded_bytes = base64.b64encode(zip_file.read())
-
-    return ch.InlineInputVolume(contents=encoded_bytes.decode())
-
+semaphore = asyncio.Semaphore(2)
 
 async def main():
-    uid = str(uuid.uuid4())
+    common_seed = random.randint(0, 500000)
 
-    client = ch.ComputeHordeClient(
-        hotkey=settings.BT_WALLET.hotkey, # For authentication and authorization
-        compute_horde_validator_hotkey=settings.CH_RELAY_VALIDATOR_SS58_ADDRESS,
-        facilitator_url=settings.CH_FACILITATOR_URL,
+    # Build job batches
+    batches = [
+        ImageGenerationBatchData(
+            internal_id=uuid.uuid4().hex,
+            seed=common_seed,
+            data_location=Path(batch_data_location),
+        )
+        for batch_data_location in glob.glob("batches/*")
+        if Path(batch_data_location).is_dir()
+    ]
+
+    # Submit jobs
+    tasks = [
+        asyncio.create_task(drive_batch_job(batch))
+        for batch in batches
+    ]
+
+    # In the meantime, submit a trusted validation job for random samples
+    # One **random** prompt per batch is good enough
+    validation_samples: list[tuple[ImageGenerationBatchData, str, int]] = []
+    for batch_data in batches:
+        prompt_idx = random.randint(0, len(batch_data.prompts) - 1)
+        prompt = batch_data.prompts[prompt_idx]
+        validation_samples.append((batch_data, prompt, prompt_idx))
+    validation_job_data = ValidationJobData(
+        internal_id=uuid.uuid4().hex,
+        seed=common_seed,
+        prompts=[sample[1] for sample in validation_samples],
     )
 
-    job_spec = ch.ComputeHordeJobSpec(
-        executor_class=ch.ExecutorClass.always_on__llm__a6000,
-        job_namespace=job_namespace,
-        docker_image=docker_image,
-        input_volumes={
-            "/volume/prompts": directory_to_volume(Path("./prompts")),
-        },
-        output_volumes={
-            "/output/images.zip": ch.HTTPOutputVolume(
-                http_method="PUT",
-                url=generate_upload_url(uid),
-            )
-        },
-        artifacts_dir="/artifacts",
-        args=[
-            "batch_generator.py",
-            "--seed", "123",
-            "--prompts-file", "/volume/prompts/prompts-batch-01.txt",
-            "--output-file", "/output/images.zip",
-        ],
-    )
+    async with semaphore:
+        await asyncio.sleep(3)
+        print("Submitting validation job")
+        validation_job = await get_ch_client().create_job(
+            job_spec=validation_job_data.as_ch_job_spec(),
+            on_trusted_miner=False,  # TODO - Change this to true after dealing with trusted executor outage
+        )
+        try:
+            await validation_job.wait(timeout=120)
+            print("Validation job finished")
+        except Exception:
+            # We'll handle this later
+            pass
 
-    created_job = await client.create_job(job_spec)
+    # Wait for jobs to finish
+    results: list[tuple[ImageGenerationBatchData, ch.ComputeHordeJob] | Exception] = await asyncio.gather(*tasks, return_exceptions=True)
 
-    while created_job.status not in {ch.ComputeHordeJobStatus.COMPLETED, ch.ComputeHordeJobStatus.FAILED, ch.ComputeHordeJobStatus.REJECTED}:
-        await created_job.refresh_from_facilitator()
-        print("Job status:", created_job.status)
-        await asyncio.sleep(1)
+    for result in results:
+        if isinstance(result, Exception):
+            print(f"Batch job failed: {result}")
 
-    if created_job.status != ch.ComputeHordeJobStatus.COMPLETED:
-        print("Job failed:", created_job.status)
+    # Download results
+    batch_output_locations: dict[ImageGenerationBatchData, Path] = {}
+    for batch_data, ch_job in (result for result in results if not isinstance(result, Exception)):
+        batch_output_location = Path("outputs") / batch_data.internal_id
+        await download_and_unpack_zip(batch_data.get_download_url(), into=batch_output_location)
+        batch_output_locations[batch_data] = batch_output_location
+        print(f"Downloaded output of batch job {batch_data} to {batch_output_location}")
+
+    if validation_job.status != ch.ComputeHordeJobStatus.COMPLETED:
+        print(f"(!) Validation job failed. Results will not be validated.")
         return
 
-    download_url = generate_download_url(uid)
-    print("Job finished!")
-    print("Results available at:", download_url)
-    print("URL will expire in 2 hours.")
+    print(f"Validating results against trusted job results")
+    validation_output_location = Path("outputs") / validation_job_data.internal_id
+    await download_and_unpack_zip(validation_job_data.get_download_url(), into=validation_output_location)
+
+    for validated_idx, sample in enumerate(validation_samples):
+        batch_data, prompt, original_idx = sample
+        if batch_data not in batch_output_locations:
+            continue
+
+        batch_output_location = batch_output_locations[batch_data]
+        test_file = batch_output_location / f"{original_idx}.png"
+        good_sample = validation_output_location / f"{validated_idx}.png"
+        print(f"Validating job {batch_data.data_location}")
+        test_hash = hashlib.sha256(test_file.read_bytes()).hexdigest()
+        good_hash = hashlib.sha256(good_sample.read_bytes()).hexdigest()
+
+        print(f"Test file: {test_file} (hash: {test_hash})")
+        print(f"Known good result: {good_sample} (hash: {good_hash})")
+        if test_hash == good_hash:
+            print(f"Batch job {batch_data.data_location} validation passed.")
+        else:
+            related_ch_job = results[validated_idx][1]
+            print(f"(!) Batch job {batch_data.data_location} validation failed.")
+            print(f"Reporting cheated job back to ComputeHorde: {related_ch_job.uuid}")
+            await get_ch_client().report_cheated_job(related_ch_job.uuid)
+
+async def drive_batch_job(job_data: ImageGenerationBatchData) -> tuple[ImageGenerationBatchData, ch.ComputeHordeJob]:
+    async with semaphore:
+        await asyncio.sleep(3)
+        spec = job_data.as_ch_job_spec()
+
+        print("Submitting batch job:", job_data)
+        job = await get_ch_client().create_job(spec, on_trusted_miner=False)
+
+        try:
+            await job.wait(timeout=120)
+        except ch.ComputeHordeJobTimeoutError:
+            print("Batch job timed out:", job_data)
+        else:
+            print(f"Batch job {job.status}: {job_data}")
+
+        if job.status != ch.ComputeHordeJobStatus.COMPLETED:
+            raise Exception(f"Batch job {job_data} failed with status {job.status}")
+
+        return job_data, job
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     asyncio.run(main())

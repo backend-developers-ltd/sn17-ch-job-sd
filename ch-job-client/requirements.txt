@@ -7,7 +7,9 @@
 aiohappyeyeballs==2.6.1
     # via aiohttp
 aiohttp==3.11.14
-    # via bittensor
+    # via
+    #   -r requirements.in
+    #   bittensor
 aiosignal==1.3.2
     # via aiohttp
 annotated-types==0.7.0
