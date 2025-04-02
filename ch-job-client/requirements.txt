@@ -54,9 +54,7 @@ cffi==1.17.1
 charset-normalizer==3.4.1
     # via requests
 click==8.1.8
-    # via
-    #   -r requirements.in
-    #   uvicorn
+    # via uvicorn
 colorama==0.4.6
     # via bittensor
 compute-horde-sdk @ git+https://github.com/backend-developers-ltd/ComputeHorde.git@94abf8314e110ba5f534604f838550fb01b662b1#subdirectory=compute_horde_sdk
