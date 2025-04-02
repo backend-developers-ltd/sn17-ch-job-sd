@@ -3,36 +3,50 @@ import dataclasses
 import random
 import shutil
 import tempfile
+import uuid
 from functools import cache, cached_property
 from io import BytesIO
 from pathlib import Path
+from typing import cast
 from zipfile import ZipFile
 
 import aiohttp
 import boto3
 from compute_horde_sdk import v1 as ch
-
+    
 import settings
 
 
 @dataclasses.dataclass(frozen=True)
-class ImageGenerationBatchData:
-    internal_id: str
+class Batch:
     seed: int
     data_location: Path
+    output_location: Path
 
     @cached_property
     def prompts(self) -> list[str]:
         return (self.data_location / "prompts.txt").read_text().splitlines()
 
-    def get_download_url(self) -> str:
-        return generate_s3_download_url(self.internal_id)
+    @cached_property
+    def sample_prompt_idx(self) -> int:
+        return random.randint(0, len(self.prompts) - 1)
 
-    def sample_random_prompt(self) -> tuple[int, str]:
-        numbered_prompts = list(enumerate(
-            (self.data_location / "prompts.txt").read_text().splitlines(),
-        ))
-        return random.choice(numbered_prompts)
+    @cached_property
+    def sample_prompt(self) -> str:
+        return self.prompts[self.sample_prompt_idx]
+
+    @cached_property
+    def download_url(self) -> str:
+        return generate_s3_download_url(self.s3_key)
+
+    @cached_property
+    def upload_url(self) -> str:
+        return generate_s3_upload_url(self.s3_key)
+
+    @cached_property
+    def s3_key(self) -> str:
+        # Has to be unique between jobs
+        return uuid.uuid4().hex
 
     def as_ch_job_spec(self) -> ch.ComputeHordeJobSpec:
         return ch.ComputeHordeJobSpec(
@@ -45,7 +59,7 @@ class ImageGenerationBatchData:
             output_volumes={
                 "/output/images.zip": ch.HTTPOutputVolume(
                     http_method="PUT",
-                    url=generate_s3_upload_url(self.internal_id),
+                    url=self.upload_url,
                 )
             },
             artifacts_dir="/artifacts",
@@ -62,33 +76,26 @@ class ImageGenerationBatchData:
             ],
         )
 
-    def __str__(self):
-        return str(self.data_location)
+    def __str__(self) -> str:
+        return str(self.data_location.stem)
 
 
 @dataclasses.dataclass(frozen=True)
-class ValidationJobData:
-    internal_id: str
-    seed: int
-    prompts: list[str]
+class ValidationData:
+    batches: list[Batch]
 
     def as_ch_job_spec(self) -> ch.ComputeHordeJobSpec:
         return ch.ComputeHordeJobSpec(
             executor_class=ch.ExecutorClass.always_on__llm__a6000,
             job_namespace=settings.JOB_NAMESPACE,
             docker_image=settings.JOB_DOCKER_IMAGE,
-            input_volumes={"/volume/batch": self.get_volume()},
-            output_volumes={
-                "/output/images.zip": ch.HTTPOutputVolume(
-                    http_method="PUT",
-                    url=generate_s3_upload_url(self.internal_id),
-                )
-            },
+            input_volumes={"/volume/batch": self.build_input_volume()},
+            output_volumes={},
             artifacts_dir="/artifacts",
             args=[
                 "batch_generator.py",
                 "--seed",
-                str(self.seed),
+                str(self.batches[0].seed),  # assume all batches share the same seed
                 "--prompts-file",
                 "/volume/batch/prompts.txt",
                 "--output-file",
@@ -98,14 +105,12 @@ class ValidationJobData:
             ],
         )
 
-    def get_volume(self) -> ch.InputVolume:
+    def build_input_volume(self) -> ch.InputVolume:
         buf = BytesIO()
         with ZipFile(buf, "w") as zf:
-            zf.writestr("prompts.txt", "\n".join(self.prompts))
+            prompts = (batch.sample_prompt for batch in self.batches)
+            zf.writestr("prompts.txt", "\n".join(prompts))
         return ch.InlineInputVolume(contents=base64.b64encode(buf.getvalue()).decode())
-
-    def get_download_url(self):
-        return generate_s3_download_url(self.internal_id, ttl_seconds=300)
 
 
 @cache
@@ -124,7 +129,7 @@ def get_s3_client():
 
 
 @cache
-def get_ch_client():
+def get_ch_client() -> ch.ComputeHordeClient:
     return ch.ComputeHordeClient(
         hotkey=settings.BT_WALLET.hotkey,  # For authentication and authorization
         compute_horde_validator_hotkey=settings.CH_RELAY_VALIDATOR_SS58_ADDRESS,
@@ -132,9 +137,9 @@ def get_ch_client():
     )
 
 
-def generate_s3_upload_url(key: str):
+def generate_s3_upload_url(key: str) -> str:
     s3 = get_s3_client()
-    return s3.generate_presigned_url(
+    url = s3.generate_presigned_url(
         "put_object",
         Params={
             "Bucket": settings.AWS_S3_BUCKET_NAME,
@@ -142,11 +147,12 @@ def generate_s3_upload_url(key: str):
         },
         ExpiresIn=1200,
     )
+    return cast(str, url)
 
 
-def generate_s3_download_url(key: str, ttl_seconds: int = 60 * 60 * 2):
+def generate_s3_download_url(key: str, ttl_seconds: int = 60 * 60 * 2) -> str:
     s3 = get_s3_client()
-    return s3.generate_presigned_url(
+    url = s3.generate_presigned_url(
         "get_object",
         Params={
             "Bucket": settings.AWS_S3_BUCKET_NAME,
@@ -154,6 +160,7 @@ def generate_s3_download_url(key: str, ttl_seconds: int = 60 * 60 * 2):
         },
         ExpiresIn=ttl_seconds,
     )
+    return cast(str, url)
 
 
 def directory_to_volume(directory: Path) -> ch.InlineInputVolume:
@@ -175,10 +182,3 @@ async def download_and_unpack_zip(url: str, into: Path) -> None:
             buf = BytesIO(await response.read())
             with ZipFile(buf, "r") as zf:
                 zf.extractall(into)
-
-
-def get_nth_file_line(n: int, file_location: Path):
-    with open(file_location, "r") as f:
-        for i, line in enumerate(f):
-            if i == n:
-                return line
