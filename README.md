@@ -2,19 +2,57 @@
 
 ComputeHorde + SN17 PoC job for running Stable Diffusion generation
 
-# TODO
+## Building job image
 
-## repo
-- [ ] Readme on how to use stuff
+In order to schedule jobs on ComputeHorde, a docker image containing the code and model to execute
+must be first build and uploaded to a registry. The registry must be accessible by miners.
 
-## docker image
-- [ ] Preload the model into the image in a way that doesn't also load it into the memory at image
-  build time
-- [ ] Support for other models via different model-config
-- [ ] Shrink the image if possible - without a model, it's >18GB just for the environment
+The `ch-job-image` directory contains a simple Dockerfile and a script (`build-image.sh`) to turn a
+"model config" into a ComputeHorde job image:
 
-## sdk client
-- [ ] TBD
+```shell
+cd ch-job-image
+./build-job-image.sh ./model-configs/sd15.yml some.docker.registry/sn17-job-sd15:latest
+docker push some.docker.registry/sn17-job-sd15:latest
+```
+
+## Executing a job
+
+The `ch-job-client` directory contains a sample python project for submitting and validating jobs
+on ComputeHorde:
+
+### Prerequisites
+- Python 3.13
+- Bittensor wallet+hotkey for authentication - can be generated just for this purpose
+- ComputeHorde Facilitator API key
+- SS58 Address of a validator who whitelisted the above wallet
+- AWS bucket and credentials with read+write access to the bucket 
+
+### Setup
+_(within the ch-job-client directory)_
+
+Initialize a venv and install requirements:
+```shell
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+Configure the client:
+```shell
+cp .env.example .env
+```
+Open the `.env` file with a text editor and fill in the configuration
+
+### Running
+Run `python submit_jobs.py`.
+
+This will:
+- Scan each subdirectory in the `batches`, each containing a list of prompts 
+- Submit it as a ComputeHorde job using the configured image
+- Pull in job results - generated images
+- In the meantime, submit a "trusted" job with prompt samples to validate the results
+- Cross-validate job results with the trusted job
+- Report issues
 
 # Stable Diffusion License notice
 
