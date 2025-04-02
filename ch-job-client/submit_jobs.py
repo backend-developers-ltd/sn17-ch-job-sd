@@ -18,12 +18,12 @@ concurrent_job_limiter = asyncio.Semaphore(2)
 async def main() -> None:
     common_seed = random.randint(0, 500000)
 
-    # Build batches - one batch will be submitted as one job
+    # Build batches from batches/* - one batch directory will be submitted as one job
     batches = [
         Batch(
             seed=common_seed,
             data_location=Path(batch_data_location),
-            output_location=Path("outputs") / Path(batch_data_location).stem,
+            output_location=Path("outputs") / Path(batch_data_location).name,
         )
         for batch_data_location in glob.glob("batches/*")
         if Path(batch_data_location).is_dir() and (Path(batch_data_location) / "prompts.txt").is_file()
@@ -34,13 +34,10 @@ async def main() -> None:
     tasks = [asyncio.create_task(drive_batch_job(batch)) for batch in batches]
 
     # In the meantime, submit a trusted validation job using random samples
-    # One **random** prompt per batch is good enough
     print("Submitting validation job")
     validation_data = ValidationData(batches)
-    validation_job = await get_ch_client().create_job(
-        job_spec=validation_data.as_ch_job_spec(),
-        on_trusted_miner=True,
-    )
+    validation_job_spec = validation_data.as_ch_job_spec()
+    validation_job = await get_ch_client().create_job(validation_job_spec, on_trusted_miner=True)
     try:
         await validation_job.wait(timeout=120)
         print(f"Validation job {validation_job.status}")
@@ -76,7 +73,7 @@ async def main() -> None:
         else:
             print(f"(!) Batch job {batch} validation failed.")
             print(f"Reporting cheated job back to ComputeHorde: {job.uuid}")
-            # await get_ch_client().report_cheated_job(job.uuid)
+            await get_ch_client().report_cheated_job(job.uuid)
 
 
 async def drive_batch_job(batch: Batch) -> ch.ComputeHordeJob:

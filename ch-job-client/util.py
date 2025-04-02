@@ -77,7 +77,7 @@ class Batch:
         )
 
     def __str__(self) -> str:
-        return str(self.data_location.stem)
+        return str(self.data_location.name)
 
 
 @dataclasses.dataclass(frozen=True)
