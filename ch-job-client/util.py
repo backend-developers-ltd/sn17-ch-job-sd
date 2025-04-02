@@ -57,6 +57,8 @@ class ImageGenerationBatchData:
                 "/volume/batch/prompts.txt",
                 "--output-file",
                 "/output/images.zip",
+                "--artifacts-directory",
+                "/artifacts",
             ],
         )
 
@@ -91,6 +93,8 @@ class ValidationJobData:
                 "/volume/batch/prompts.txt",
                 "--output-file",
                 "/output/images.zip",
+                "--artifacts-directory",
+                "/artifacts",
             ],
         )
 
