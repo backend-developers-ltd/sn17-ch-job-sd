@@ -145,7 +145,7 @@ def generate_s3_upload_url(key: str) -> str:
             "Bucket": settings.AWS_S3_BUCKET_NAME,
             "Key": f"images/{key}",
         },
-        ExpiresIn=1200,
+        ExpiresIn=600,
     )
     return cast(str, url)
 
