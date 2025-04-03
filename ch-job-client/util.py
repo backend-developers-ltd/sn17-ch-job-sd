@@ -13,7 +13,7 @@ from zipfile import ZipFile
 import aiohttp
 import boto3
 from compute_horde_sdk import v1 as ch
-    
+
 import settings
 
 
@@ -106,11 +106,12 @@ class ValidationData:
         )
 
     def build_input_volume(self) -> ch.InputVolume:
-        buf = BytesIO()
-        with ZipFile(buf, "w") as zf:
-            prompts = (batch.sample_prompt for batch in self.batches)
-            zf.writestr("prompts.txt", "\n".join(prompts))
-        return ch.InlineInputVolume(contents=base64.b64encode(buf.getvalue()).decode())
+        contents = "\n".join(batch.sample_prompt for batch in self.batches)
+        return ch.InlineInputVolume.from_file_contents(
+            "prompts.txt",
+            contents=contents,
+            compress=True,
+        )
 
 
 @cache
