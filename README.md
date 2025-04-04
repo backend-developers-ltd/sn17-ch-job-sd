@@ -25,15 +25,15 @@ on ComputeHorde:
 - Python 3.13
 - Bittensor wallet+hotkey for authentication - can be generated just for this purpose
 - ComputeHorde Facilitator API key
-- SS58 Address of a validator who whitelisted the above wallet
-- AWS bucket and credentials with read+write access to the bucket 
+- SS58 Address of a validator who has whitelisted the above wallet
+- AWS bucket and credentials with read+write access to the bucket
 
 ### Setup
 _(within the ch-job-client directory)_
 
 Initialize a venv and install requirements:
 ```shell
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
@@ -47,7 +47,7 @@ Open the `.env` file with a text editor and fill in the configuration
 Run `python submit_jobs.py`.
 
 This will:
-- Scan each subdirectory in the `batches`, each containing a list of prompts 
+- Scan each subdirectory in the `batches`, each containing a list of prompts
 - Submit it as a ComputeHorde job using the configured image
 - Pull in job results - generated images
 - In the meantime, submit a "trusted" job with prompt samples to validate the results
