@@ -1,5 +1,6 @@
 import asyncio
 import glob
+import hashlib
 import random
 from pathlib import Path
 
@@ -37,12 +38,14 @@ async def main() -> None:
     print("Submitting validation job")
     validation_data = ValidationData(batches)
     validation_job_spec = validation_data.as_ch_job_spec()
-    validation_job = await get_ch_client().create_job(validation_job_spec, on_trusted_miner=True)
+    validation_job = await get_ch_client().run_until_complete(
+        validation_job_spec, on_trusted_miner=True, max_attempts=30
+    )
     try:
         await validation_job.wait(timeout=120)
         print(f"Validation job {validation_job.status}")
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"Validation job failed with exception: {e}")
 
     # Wait for jobs to finish
     results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -54,7 +57,7 @@ async def main() -> None:
     }
 
     if validation_job.status != ch.ComputeHordeJobStatus.COMPLETED:
-        print("(!) Validation job failed. Results will not be validated.")
+        print(f"(!) Validation job failed. Results will not be validated. ({validation_job.status})")
         return
 
     print("Validating results against trusted job results")
@@ -64,11 +67,13 @@ async def main() -> None:
         test_file = batch.output_location / f"{batch.sample_prompt_idx}.png"
         miner_reported_hash = job.result.artifacts.get(f"/artifacts/{batch.sample_prompt_idx}.png.sha256")
         trusted_hash = validation_job.result.artifacts.get(f"/artifacts/{validation_idx}.png.sha256")
+        calculated_hash = hashlib.sha256(test_file.read_bytes()).hexdigest().encode()
 
         print("Test file:", test_file)
         print("Miner reported hash:", miner_reported_hash)
         print("Trusted hash:", trusted_hash)
-        if miner_reported_hash == trusted_hash:
+        print("Calculated hash:", calculated_hash)
+        if miner_reported_hash == trusted_hash == calculated_hash:
             print(f"Batch job {batch} validation passed.")
         else:
             print(f"(!) Batch job {batch} validation failed.")
