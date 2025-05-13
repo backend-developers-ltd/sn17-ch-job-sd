@@ -8,12 +8,25 @@ In order to schedule jobs on ComputeHorde, a docker image containing the code an
 must be first build and uploaded to a registry. The registry must be accessible by miners.
 
 The `ch-job-image` directory contains a simple Dockerfile and a script (`build-image.sh`) to turn a
-"model config" into a ComputeHorde job image:
+"model config" into a ComputeHorde job image.
+
+### Prerequisites
+
+- docker and git installed on your machine
+- upload access to a docker registry
+
+### Preparation (one-time)
 
 ```shell
 cd ch-job-image
-./build-job-image.sh ./model-configs/sd15.yml some.docker.registry/sn17-job-sd15:latest
-docker push some.docker.registry/sn17-job-sd15:latest
+git clone <image-generator-repo-address> image-generator
+```
+
+### Building the image
+
+```shell
+./build-job-image.sh ./model-configs/sd15.yml <some.docker.registry/image-name>:latest
+docker push <some.docker.registry/image-name>:latest
 ```
 
 ## Executing a job
@@ -22,31 +35,38 @@ The `ch-job-client` directory contains a sample python project for submitting an
 on ComputeHorde:
 
 ### Prerequisites
+
 - Python 3.13
 - Bittensor wallet+hotkey for authentication - can be generated just for this purpose
-- ComputeHorde Facilitator API key
 - SS58 Address of a validator who has whitelisted the above wallet
 - AWS bucket and credentials with read+write access to the bucket
 
 ### Setup
+
 _(within the ch-job-client directory)_
 
 Initialize a venv and install requirements:
+
 ```shell
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
+
 Configure the client:
+
 ```shell
 cp .env.example .env
 ```
+
 Open the `.env` file with a text editor and fill in the configuration
 
 ### Running
+
 Run `python submit_jobs.py`.
 
 This will:
+
 - Scan each subdirectory in the `batches`, each containing a list of prompts
 - Submit it as a ComputeHorde job using the configured image
 - Pull in job results - generated images
