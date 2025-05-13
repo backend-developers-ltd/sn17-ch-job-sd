@@ -1,4 +1,4 @@
-compute-horde-sdk @ git+https://github.com/backend-developers-ltd/ComputeHorde.git@94abf8314e110ba5f534604f838550fb01b662b1#subdirectory=compute_horde_sdk&egg=compute_horde_sdk
+compute-horde-sdk @ git+https://github.com/backend-developers-ltd/ComputeHorde.git@d88e0da3bce1e74e799406dd25c4b6fc5a311834#subdirectory=compute_horde_sdk&egg=compute_horde_sdk
 python-decouple==3.8
 boto3~=1.37
 aiohttp~=3.11

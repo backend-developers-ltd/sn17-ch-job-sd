@@ -2,7 +2,6 @@ import bittensor
 from decouple import config as _conf
 
 CH_FACILITATOR_URL: str = _conf("CH_FACILITATOR_URL")
-CH_FACILITATOR_TOKEN: str = _conf("CH_FACILITATOR_TOKEN")
 
 JOB_NAMESPACE: str = _conf("JOB_NAMESPACE")
 JOB_DOCKER_IMAGE: str = _conf("JOB_DOCKER_IMAGE")

@@ -18,6 +18,8 @@ anyio==4.9.0
     # via
     #   httpx
     #   starlette
+asgiref==3.8.1
+    # via compute-horde-sdk
 async-substrate-interface==1.0.8
     # via bittensor
 asyncstdlib==3.13.1
@@ -57,7 +59,7 @@ click==8.1.8
     # via uvicorn
 colorama==0.4.6
     # via bittensor
-compute-horde-sdk @ git+https://github.com/backend-developers-ltd/ComputeHorde.git@94abf8314e110ba5f534604f838550fb01b662b1#subdirectory=compute_horde_sdk
+compute-horde-sdk @ git+https://github.com/backend-developers-ltd/ComputeHorde.git@d88e0da3bce1e74e799406dd25c4b6fc5a311834#subdirectory=compute_horde_sdk
     # via -r requirements.in
 cryptography==43.0.3
     # via bittensor-wallet
@@ -73,17 +75,25 @@ eth-utils==2.2.2
     # via bittensor-wallet
 fastapi==0.110.3
     # via bittensor
+filelock==3.18.0
+    # via huggingface-hub
 frozenlist==1.5.0
     # via
     #   aiohttp
     #   aiosignal
+fsspec==2025.3.2
+    # via huggingface-hub
 h11==0.14.0
     # via
     #   httpcore
     #   uvicorn
+hf-transfer==0.1.9
+    # via huggingface-hub
 httpcore==1.0.7
     # via httpx
 httpx==0.28.1
+    # via compute-horde-sdk
+huggingface-hub[hf-transfer]==0.31.2
     # via compute-horde-sdk
 idna==3.10
     # via
@@ -124,7 +134,9 @@ numpy==2.0.2
     #   bittensor
     #   msgpack-numpy-opentensor
 packaging==24.2
-    # via bittensor
+    # via
+    #   bittensor
+    #   huggingface-hub
 password-strength==0.0.3.post2
     # via bittensor-wallet
 propcache==0.3.0
@@ -157,12 +169,15 @@ python-levenshtein==0.27.1
 python-statemachine==2.5.0
     # via bittensor
 pyyaml==6.0.2
-    # via bittensor
+    # via
+    #   bittensor
+    #   huggingface-hub
 rapidfuzz==3.12.2
     # via levenshtein
 requests==2.32.3
     # via
     #   bittensor
+    #   huggingface-hub
     #   scalecodec
 retry==0.9.2
     # via bittensor
@@ -193,11 +208,14 @@ toml==0.10.0
     # via bt-decode
 toolz==1.0.0
     # via cytoolz
+tqdm==4.67.1
+    # via huggingface-hub
 typing-extensions==4.12.2
     # via
     #   anyio
     #   eth-typing
     #   fastapi
+    #   huggingface-hub
     #   pydantic
     #   pydantic-core
 urllib3==2.3.0
