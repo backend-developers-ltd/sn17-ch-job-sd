@@ -37,7 +37,11 @@ async def main() -> None:
     # In the meantime, submit a trusted validation job using random samples
     print("Submitting validation job")
     validation_data = ValidationData(batches)
-    validation_job_spec = validation_data.as_ch_job_spec()
+    validation_job_spec = validation_data.as_ch_job_spec(
+        expected_input_download_time=5,
+        expected_execution_time=60,
+        expected_results_upload_time=5,
+    )
     validation_job = await get_ch_client().run_until_complete(
         validation_job_spec, on_trusted_miner=True, max_attempts=30
     )
@@ -91,7 +95,11 @@ async def drive_batch_job(batch: Batch) -> ch.ComputeHordeJob:
         await asyncio.sleep(3)  # Short pause allows a recently used miner to pick up the job
         try:
             print("Submitting batch job:", batch)
-            spec = batch.as_ch_job_spec()
+            spec = batch.as_ch_job_spec(
+                expected_input_download_time=5,
+                expected_execution_time=60,
+                expected_results_upload_time=5,
+            )
             job = await get_ch_client().run_until_complete(spec, max_attempts=30, timeout=300)
             print(f"Batch job {job.status}: {batch}")
             if job.status != ch.ComputeHordeJobStatus.COMPLETED:

@@ -48,7 +48,12 @@ class Batch:
         # Has to be unique between jobs
         return uuid.uuid4().hex
 
-    def as_ch_job_spec(self) -> ch.ComputeHordeJobSpec:
+    def as_ch_job_spec(
+        self,
+        expected_input_download_time: int,
+        expected_execution_time: int,
+        expected_results_upload_time: int,
+    ) -> ch.ComputeHordeJobSpec:
         return ch.ComputeHordeJobSpec(
             executor_class=ch.ExecutorClass.always_on__llm__a6000,
             job_namespace=settings.JOB_NAMESPACE,
@@ -74,6 +79,9 @@ class Batch:
                 "--artifacts-directory",
                 "/artifacts",
             ],
+            download_time_limit_sec=expected_input_download_time,
+            execution_time_limit_sec=expected_execution_time,
+            upload_time_limit_sec=expected_results_upload_time,
         )
 
     def __str__(self) -> str:
@@ -84,7 +92,12 @@ class Batch:
 class ValidationData:
     batches: list[Batch]
 
-    def as_ch_job_spec(self) -> ch.ComputeHordeJobSpec:
+    def as_ch_job_spec(
+        self,
+        expected_input_download_time: int,
+        expected_execution_time: int,
+        expected_results_upload_time: int,
+    ) -> ch.ComputeHordeJobSpec:
         return ch.ComputeHordeJobSpec(
             executor_class=ch.ExecutorClass.always_on__llm__a6000,
             job_namespace=settings.JOB_NAMESPACE,
@@ -103,6 +116,9 @@ class ValidationData:
                 "--artifacts-directory",
                 "/artifacts",
             ],
+            download_time_limit_sec=expected_input_download_time,
+            execution_time_limit_sec=expected_execution_time,
+            upload_time_limit_sec=expected_results_upload_time,
         )
 
     def build_input_volume(self) -> ch.InputVolume:
