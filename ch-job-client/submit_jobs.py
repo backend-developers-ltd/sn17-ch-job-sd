@@ -13,7 +13,7 @@ from util import (
     download_and_unpack_zip,
 )
 
-concurrent_job_limiter = asyncio.Semaphore(2)
+concurrent_job_limiter = asyncio.Semaphore(1)
 
 
 async def main() -> None:
@@ -97,7 +97,7 @@ async def drive_batch_job(batch: Batch) -> ch.ComputeHordeJob:
             print("Submitting batch job:", batch)
             spec = batch.as_ch_job_spec(
                 expected_input_download_time=5,
-                expected_execution_time=60,
+                expected_execution_time=900,
                 expected_results_upload_time=5,
             )
             job = await get_ch_client().run_until_complete(spec, max_attempts=30, timeout=300)

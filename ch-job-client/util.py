@@ -133,25 +133,33 @@ class ValidationData:
 @cache
 def get_s3_client():
     s3_client_opts: dict[str, str] = {}
-    if settings.AWS_S3_ENDPOINT:
-        s3_client_opts["endpoint_url"] = settings.AWS_S3_ENDPOINT
-    if settings.AWS_ACCESS_KEY_ID:
-        s3_client_opts["aws_access_key_id"] = settings.AWS_ACCESS_KEY_ID
-    if settings.AWS_SECRET_ACCESS_KEY:
-        s3_client_opts["aws_secret_access_key"] = settings.AWS_SECRET_ACCESS_KEY
-    if settings.AWS_REGION_NAME:
-        s3_client_opts["region_name"] = settings.AWS_REGION_NAME
+    if settings.R2_ENDPOINT:
+        s3_client_opts["endpoint_url"] = settings.R2_ENDPOINT
+    if settings.R2_ACCESS_KEY_ID:
+        s3_client_opts["aws_access_key_id"] = settings.R2_ACCESS_KEY_ID
+    if settings.R2_SECRET_ACCESS_KEY:
+        s3_client_opts["aws_secret_access_key"] = settings.R2_SECRET_ACCESS_KEY
+    s3_client_opts["region_name"] = "auto"
     s3 = boto3.client("s3", **s3_client_opts)
+
     return s3
 
 
 @cache
 def get_ch_client() -> ch.ComputeHordeClient:
-    return ch.ComputeHordeClient(
-        hotkey=settings.BT_WALLET.hotkey,  # For authentication and authorization
-        compute_horde_validator_hotkey=settings.CH_RELAY_VALIDATOR_SS58_ADDRESS,
-        facilitator_url=settings.CH_FACILITATOR_URL,
-    )
+    try:
+        print("BT_WALLET.hotkey", settings.BT_WALLET.hotkey.ss58_address)
+        print("CH_RELAY_VALIDATOR_SS58_ADDRESS", settings.CH_RELAY_VALIDATOR_SS58_ADDRESS)
+        print("CH_FACILITATOR_URL", settings.CH_FACILITATOR_URL)
+
+        return ch.ComputeHordeClient(
+            hotkey=settings.BT_WALLET.hotkey,  # For authentication and authorization
+            compute_horde_validator_hotkey=settings.CH_RELAY_VALIDATOR_SS58_ADDRESS,
+            facilitator_url=settings.CH_FACILITATOR_URL,
+        )
+    except Exception as e:
+        print("Error getting CH client", e)
+        raise e
 
 
 def generate_s3_upload_url(key: str) -> str:
@@ -159,7 +167,7 @@ def generate_s3_upload_url(key: str) -> str:
     url = s3.generate_presigned_url(
         "put_object",
         Params={
-            "Bucket": settings.AWS_S3_BUCKET_NAME,
+            "Bucket": settings.R2_BUCKET_NAME,
             "Key": f"images/{key}",
         },
         ExpiresIn=600,
