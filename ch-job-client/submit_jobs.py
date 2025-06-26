@@ -65,6 +65,8 @@ async def main() -> None:
         return
 
     print("Validating results against trusted job results")
+    if not successful_batch_results:
+        print("No successful batch jobs found. Nothing to validate.")
     for batch, job in successful_batch_results.items():
         print(f"Validating batch job {batch}")
         validation_idx = validation_data.batches.index(batch)
@@ -91,6 +93,9 @@ async def drive_batch_job(batch: Batch) -> ch.ComputeHordeJob:
     Returns the successful ComputeHorde job.
     Throws an exception if the job is not successful for any reason.
     """
+    def attempt_callback(ch_job: ch.ComputeHordeJob) -> None:
+        print(f"Batch job {batch} submitted as CH job {ch_job.uuid}")
+
     async with concurrent_job_limiter:
         await asyncio.sleep(3)  # Short pause allows a recently used miner to pick up the job
         try:
@@ -100,7 +105,7 @@ async def drive_batch_job(batch: Batch) -> ch.ComputeHordeJob:
                 expected_execution_time=900,
                 expected_results_upload_time=5,
             )
-            job = await get_ch_client().run_until_complete(spec, max_attempts=30, timeout=300)
+            job = await get_ch_client().run_until_complete(spec, max_attempts=30, timeout=300, job_attempt_callback=attempt_callback)
             print(f"Batch job {job.status}: {batch}")
             if job.status != ch.ComputeHordeJobStatus.COMPLETED:
                 raise Exception(f"Batch job {batch} failed with status {job.status}")
