@@ -180,7 +180,7 @@ def generate_s3_download_url(key: str, ttl_seconds: int = 60 * 60 * 2) -> str:
     url = s3.generate_presigned_url(
         "get_object",
         Params={
-            "Bucket": settings.AWS_S3_BUCKET_NAME,
+            "Bucket": settings.R2_BUCKET_NAME,
             "Key": f"images/{key}",
         },
         ExpiresIn=ttl_seconds,
