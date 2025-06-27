@@ -3,6 +3,7 @@ import glob
 import hashlib
 import random
 from pathlib import Path
+from typing import Callable
 
 import compute_horde_sdk.v1 as ch
 
@@ -37,13 +38,12 @@ async def main() -> None:
     # In the meantime, submit a trusted validation job using random samples
     print("Submitting validation job")
     validation_data = ValidationData(batches)
-    validation_job_spec = validation_data.as_ch_job_spec(
-        expected_input_download_time=5,
-        expected_execution_time=60,
-        expected_results_upload_time=5,
-    )
+    validation_job_spec = validation_data.as_ch_job_spec()
     validation_job = await get_ch_client().run_until_complete(
-        validation_job_spec, on_trusted_miner=True, max_attempts=30
+        validation_job_spec,
+        on_trusted_miner=True,
+        max_attempts=30,
+        job_attempt_callback=_log_attempts(validation_data),
     )
     try:
         await validation_job.wait(timeout=120)
@@ -93,19 +93,20 @@ async def drive_batch_job(batch: Batch) -> ch.ComputeHordeJob:
     Returns the successful ComputeHorde job.
     Throws an exception if the job is not successful for any reason.
     """
-    def attempt_callback(ch_job: ch.ComputeHordeJob) -> None:
-        print(f"Batch job {batch} submitted as CH job {ch_job.uuid}")
 
     async with concurrent_job_limiter:
         await asyncio.sleep(3)  # Short pause allows a recently used miner to pick up the job
         try:
             print("Submitting batch job:", batch)
-            spec = batch.as_ch_job_spec(
-                expected_input_download_time=5,
-                expected_execution_time=900,
-                expected_results_upload_time=5,
+            spec = batch.as_ch_job_spec()
+            print(f"Upload URL: {batch.upload_url}")
+            print(f"Download URL: {batch.download_url}")
+            job = await get_ch_client().run_until_complete(
+                spec,
+                max_attempts=30,
+                timeout = 1800,
+                job_attempt_callback=_log_attempts(batch),
             )
-            job = await get_ch_client().run_until_complete(spec, max_attempts=30, timeout=300, job_attempt_callback=attempt_callback)
             print(f"Batch job {job.status}: {batch}")
             if job.status != ch.ComputeHordeJobStatus.COMPLETED:
                 raise Exception(f"Batch job {batch} failed with status {job.status}")
@@ -117,6 +118,16 @@ async def drive_batch_job(batch: Batch) -> ch.ComputeHordeJob:
 
         return job
 
+
+def _log_attempts(batch: Batch | ValidationData) -> Callable[[ch.ComputeHordeJob], None]:
+    attempt_count = 0
+
+    def _callback(ch_job: ch.ComputeHordeJob):
+        nonlocal attempt_count
+        attempt_count += 1
+        print(f"[{batch}] [attempt {attempt_count}] submitted as CH job {ch_job.uuid}")
+
+    return _callback
 
 if __name__ == "__main__":
     asyncio.run(main())

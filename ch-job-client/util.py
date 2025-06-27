@@ -48,12 +48,22 @@ class Batch:
         # Has to be unique between jobs
         return uuid.uuid4().hex
 
-    def as_ch_job_spec(
-        self,
-        expected_input_download_time: int,
-        expected_execution_time: int,
-        expected_results_upload_time: int,
-    ) -> ch.ComputeHordeJobSpec:
+    @cached_property
+    def expected_input_download_time(self) -> int:
+        # Only the prompts file is downloaded
+        return 5
+
+    @cached_property
+    def expected_execution_time(self) -> int:
+        # 10s for preparation + 26s per image
+        return 10 + len(self.prompts) * 26
+
+    @cached_property
+    def expected_results_upload_time(self) -> int:
+        # Zip + upload of all output images
+        return 30
+
+    def as_ch_job_spec(self) -> ch.ComputeHordeJobSpec:
         return ch.ComputeHordeJobSpec(
             executor_class=ch.ExecutorClass.always_on__llm__a6000,
             job_namespace=settings.JOB_NAMESPACE,
@@ -79,9 +89,9 @@ class Batch:
                 "--artifacts-directory",
                 "/artifacts",
             ],
-            download_time_limit_sec=expected_input_download_time,
-            execution_time_limit_sec=expected_execution_time,
-            upload_time_limit_sec=expected_results_upload_time,
+            download_time_limit_sec=self.expected_input_download_time,
+            execution_time_limit_sec=self.expected_execution_time,
+            upload_time_limit_sec=self.expected_results_upload_time,
         )
 
     def __str__(self) -> str:
@@ -92,12 +102,22 @@ class Batch:
 class ValidationData:
     batches: list[Batch]
 
-    def as_ch_job_spec(
-        self,
-        expected_input_download_time: int,
-        expected_execution_time: int,
-        expected_results_upload_time: int,
-    ) -> ch.ComputeHordeJobSpec:
+    @cached_property
+    def expected_input_download_time(self) -> int:
+        # Only the prompts file is downloaded.
+        return 5
+
+    @cached_property
+    def expected_execution_time(self) -> int:
+        # 10s for preparation + 26s per batch (1 image per batch)
+        return 10 + len(self.batches) * 26
+
+    @cached_property
+    def expected_results_upload_time(self) -> int:
+        # Reading and serializing artifacts - image hash files. Shouldn't take more than a couple of seconds.
+        return 5
+
+    def as_ch_job_spec(self) -> ch.ComputeHordeJobSpec:
         return ch.ComputeHordeJobSpec(
             executor_class=ch.ExecutorClass.always_on__llm__a6000,
             job_namespace=settings.JOB_NAMESPACE,
@@ -116,9 +136,9 @@ class ValidationData:
                 "--artifacts-directory",
                 "/artifacts",
             ],
-            download_time_limit_sec=expected_input_download_time,
-            execution_time_limit_sec=expected_execution_time,
-            upload_time_limit_sec=expected_results_upload_time,
+            download_time_limit_sec=self.expected_input_download_time,
+            execution_time_limit_sec=self.expected_execution_time,
+            upload_time_limit_sec=self.expected_results_upload_time,
         )
 
     def build_input_volume(self) -> ch.InputVolume:
@@ -128,6 +148,9 @@ class ValidationData:
             contents=contents,
             compress=True,
         )
+
+    def __str__(self) -> str:
+        return str("validation batch")
 
 
 @cache
@@ -162,7 +185,7 @@ def get_ch_client() -> ch.ComputeHordeClient:
         raise e
 
 
-def generate_s3_upload_url(key: str) -> str:
+def generate_s3_upload_url(key: str, expires_in: int = 60 * 60 * 2) -> str:
     s3 = get_s3_client()
     url = s3.generate_presigned_url(
         "put_object",
@@ -170,12 +193,12 @@ def generate_s3_upload_url(key: str) -> str:
             "Bucket": settings.R2_BUCKET_NAME,
             "Key": f"images/{key}",
         },
-        ExpiresIn=600,
+        ExpiresIn=expires_in,
     )
     return cast(str, url)
 
 
-def generate_s3_download_url(key: str, ttl_seconds: int = 60 * 60 * 2) -> str:
+def generate_s3_download_url(key: str, expires_in: int = 60 * 60 * 2) -> str:
     s3 = get_s3_client()
     url = s3.generate_presigned_url(
         "get_object",
@@ -183,7 +206,7 @@ def generate_s3_download_url(key: str, ttl_seconds: int = 60 * 60 * 2) -> str:
             "Bucket": settings.R2_BUCKET_NAME,
             "Key": f"images/{key}",
         },
-        ExpiresIn=ttl_seconds,
+        ExpiresIn=expires_in,
     )
     return cast(str, url)
 
